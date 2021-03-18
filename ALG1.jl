@@ -73,3 +73,4 @@ end
     
      xₖ,k,E = GenAlg(x₀,A,b,α,a,ϵ=1e-6)
 # Tested on example 1 i section3 and with 111 iteration gives exactlly same results as Dia's paper.
+
