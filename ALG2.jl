@@ -4,24 +4,61 @@ function Quadratic(x,A,b)
     return dot(x,A*x)+2*dot(b,x)
 end
 
-function  pickupRoot(h₁,h₂,λ₁,λ₂,Sol)
-       
-    for  p₁ in Sol   
-         μ₁=(h₁-p₁)/(λ₁*p₁)
-        
-        if μ₁<=0
+function  pickupRoot(β,h₁,h₂,λ₁,λ₂)   
+    p = [0.,0]
+    #solve Quadratic in lemma 1 to find p₁ then p₂ with following formula
+    #P=((λ₁*(λ₁-λ₂)^2))*(p₁)^4+(2*λ₁*λ₂*h₁*(λ₁-λ₂))*(p₁)^3+((λ₁*λ₂^2*h₁^2)+(λ₁^2*λ₂*h₂^2)-(β*(λ₁-λ₂)^2))*(p₁^2)-2*β*(λ₁*λ₂*h₁-λ₂^2*h₁)*(p₁)-(β*λ₂^2*h₁^2)
+    a4=((λ₁*(λ₁-λ₂)^2))
+    a3=(2*λ₁*λ₂*h₁*(λ₁-λ₂))
+    a2=((λ₁*λ₂^2*h₁^2)+(λ₁^2*λ₂*h₂^2)-(β*(λ₁-λ₂)^2))
+    a1=-2*β*(λ₁*λ₂*h₁-λ₂^2*h₁)
+    a0=-(β*λ₂^2*h₁^2)
+    S=roots([a0, a1, a2, a3, a4])
+    #choose just Real roots =============================
+    indexreal=findall(x->abs.(x)<1e-12,imag.(S))
+    Sol=real.(S[indexreal])
+ 
+    #choose the right root ============================================
+    !isempty(Sol) ? nothing :  @error "No solution for the quartic equation"
+    for  p₁ in Sol
+        sol1 = p₁
+        μ₁=(h₁-p₁)/(λ₁*p₁)
+        if μ₁<=0.
             continue
         else
             p₂=(λ₁*h₂)/((λ₁-λ₂)*p₁+λ₂*h₁)*p₁
             μ₂=(h₂-p₂)/(λ₂*p₂)
-            if  μ₂<=0 
+            if  μ₂<=0. && !(μ₂ ≈ μ₁) 
                 continue
             end
-            
         end
+        sol2 = p₂
+        p = [sol1,sol2]
     end
-    return   p₁,p₂
-end 
+    return   p
+end
+
+function compute_Alg1_γk(vₖdotAvₖ,vₖdotvₖ,vₖdotAzₖ,zₖdotAzₖ,zₖdotzₖ)
+    M1=(vₖdotAvₖ)/(vₖdotvₖ)
+    M2=(zₖdotAzₖ)/(zₖdotzₖ)
+    M3=((M1-M2)^2 )
+    M4=4*(vₖdotAzₖ)^2/(vₖdotvₖ*zₖdotzₖ)
+    M5=sqrt(M3+M4)
+    ρₖ=[M1+M2+M5]/2
+    γₖ=1/ρₖ
+    return γₖ
+end
+
+function compute_Alg1_ηk(gₐ,qa_α,wₖ,wₖdotAwₖ)
+    N1=dot(gₐ,wₖ)/(wₖdotAwₖ)
+    N2=(N1).^2
+    N3=(qa_α)./(wₖdotAwₖ)
+    ηₖ=-N1-sqrt(N2-N3)
+    return ηₖ
+end
+
+
+
 
 
  function GenAlg(x₀,A,b,α,a ;ϵ=1e-6, max_itr=100)
@@ -37,8 +74,9 @@ end
     Mₖ=uₖdotvₖ/(normuₖ* normvₖ)  #Mk is qoutient in tolerance condition
     E=1-Mₖ 
     k=0
+    called_alg = :Alg2
     while k<= max_itr && E>=ϵ
-       
+
         zₖ =uₖ-((uₖdotvₖ)/(vₖdotvₖ))*vₖ
         normzₖ=norm(zₖ)
         zₖdotzₖ=dot(zₖ,zₖ)
@@ -49,16 +87,11 @@ end
         zₖdotAzₖ=dot(zₖ,Azₖ)
         vₖdotAzₖ=dot(vₖ,Azₖ)
         zₖdotAvₖ=dot(zₖ,Avₖ)
-       #= M1=(vₖdotAvₖ)/(vₖdotvₖ)
-        M2=(zₖdotAzₖ)/(zₖdotzₖ)
-        M3=((M1-M2)^2 )
-        M4=4*(vₖdotAzₖ)^2/(vₖdotvₖ*zₖdotzₖ)
-        M5=sqrt(M3+M4)
-        ρₖ=[M1+M2+M5]/2 
-        γₖ⁽¹⁾=1/ρₖ
+       #= 
         cₖ=xₖ-( γₖ⁽¹⁾.*uₖ)  #the center of maximal 2-d inside ball
         #  Step3  ==== Calculation of  xk+1  ==============================
         wₖ=cₖ-a
+        wₖ=xₖ-( γₖ⁽¹⁾.*uₖ)-a
         # ηk =============================
         Awₖ=A*wₖ
         wₖdotAwₖ= dot(wₖ,Awₖ)
@@ -72,7 +105,8 @@ end
 
        #Alg2================================================
        aₗ=[normvₖ,0]
-       Aₖ=[(vₖdotAvₖ)/(normvₖ^2)  (vₖdotAzₖ)/(normvₖ*normzₖ) ; (zₖdotAvₖ)/(normvₖ*normzₖ)  (zₖdotAzₖ)/(normzₖ^2)]
+       Aₖ=[(vₖdotAvₖ)/(normvₖ^2)  (vₖdotAzₖ)/(normvₖ*normzₖ) ; 
+             (zₖdotAvₖ)/(normvₖ*normzₖ)  (zₖdotAzₖ)/(normzₖ^2)]
        bₖ=[(uₖdotvₖ)/(normvₖ);(uₖdotzₖ)/(normzₖ)]
        D, Q = eigen(Aₖ)
        Qbₖ=Q*bₖ
@@ -85,33 +119,25 @@ end
        h₂=aₕ[2]
        λ₁=D[1]
        λ₂=D[2]
-       
-       #solve Quadratic in lemma 1 to find p₁ then p₂ with following formula
-       #P=((λ₁*(λ₁-λ₂)^2))*(p₁)^4+(2*λ₁*λ₂*h₁*(λ₁-λ₂))*(p₁)^3+((λ₁*λ₂^2*h₁^2)+(λ₁^2*λ₂*h₂^2)-(β*(λ₁-λ₂)^2))*(p₁^2)-2*β*(λ₁*λ₂*h₁-λ₂^2*h₁)*(p₁)-(β*λ₂^2*h₁^2)
-        a4=((λ₁*(λ₁-λ₂)^2))
-        a3=(2*λ₁*λ₂*h₁*(λ₁-λ₂))
-        a2=((λ₁*λ₂^2*h₁^2)+(λ₁^2*λ₂*h₂^2)-(β*(λ₁-λ₂)^2))
-        a1=-2*β*(λ₁*λ₂*h₁-λ₂^2*h₁)
-        a0=-(β*λ₂^2*h₁^2)
-       S=roots([a0, a1, a2, a3, a4])
-       #choose just Real roots =============================
-       
-        
-       #choose the right root ============================================
-       indexreal=findall(x->abs.(x)<1e-12,imag.(S))
-
-        Sol=real.(S[indexreal])
-   
-        p₁,p₂=pickupRoot(h₁,h₂,λ₁,λ₂,Sol)
+       p  = pickupRoot(β,h₁,h₂,λ₁,λ₂)
+        println(p)
         #println(" p₁=$p₁,p₂=$p₂")
         #return   p₁,p₂
-        aₕ⁽ᵖ⁾=[p₁ p₂]'       
-       aₗ⁽ᵖ⁾=Q'*( aₕ⁽ᵖ⁾- D⁻¹Qbₖ)
+    aₕ⁽ᵖ⁾= p       
+    aₗ⁽ᵖ⁾=Q'*(aₕ⁽ᵖ⁾- D⁻¹Qbₖ)
       # xₖ₊₁ ===========================================================#
        ηₖ⁽²⁾ =1-((aₗ⁽ᵖ⁾[1])/(normvₖ)+( uₖdotvₖ)/(vₖdotvₖ))*(aₗ⁽ᵖ⁾[2])/(normzₖ)
        γₖ⁽²⁾=-1*((aₗ⁽ᵖ⁾[2])/(normzₖ))./(ηₖ⁽²⁾)
-       ωₖ⁽²⁾=-1*(γₖ⁽²⁾*uₖ)-vₖ
-       xₖ=a.+(ηₖ⁽²⁾*ωₖ⁽²⁾)
+       println(γₖ⁽²⁾) 
+    #    if γₖ⁽²⁾ < 0. || abs(γₖ⁽²⁾) <= ϵ
+    #         γₖ⁽²⁾ = compute_Alg1_γk(vₖdotAvₖ,vₖdotvₖ,vₖdotAzₖ,zₖdotAzₖ,zₖdotzₖ)
+    #         ωₖ⁽²⁾=-1*(γₖ⁽²⁾*uₖ)-vₖ
+    #         wₖdotAwₖ = dot(ωₖ⁽²⁾,A*ωₖ⁽²⁾)
+    #         ηₖ⁽²⁾ = compute_Alg1_ηk(gₐ,qa_α,ωₖ⁽²⁾,wₖdotAwₖ)
+    #    else
+            ωₖ⁽²⁾=-1*(γₖ⁽²⁾*uₖ)-vₖ
+    #    end
+       
        uₖ =A*xₖ+b
        vₖ =a-xₖ 
        uₖdotvₖ=dot(uₖ,vₖ)
