@@ -14,7 +14,7 @@ end
     vₖdotvₖ=dot(vₖ,vₖ)
     normuₖ=norm(uₖ)
     normvₖ=sqrt(vₖdotvₖ)
-    Mₖ =uₖdotvₖ/(normuₖ* normvₖ)  #Mk is qoutient in tolerance condition
+    Mₖ =uₖdotvₖ/(normuₖ* normvₖ)  #Mk is quotient in tolerance condition
     E=1-Mₖ 
     k=0
     while k<= max_itr && E>=ϵ
@@ -71,5 +71,6 @@ end
      α=385
      x₀=sqrt(α/Quadratic(a,A,b)).*a 
     
-     xₖ,k,E=  GenAlg(x₀,A,b,α,a,ϵ=1e-6)
+     xₖ,k,E = GenAlg(x₀,A,b,α,a,ϵ=1e-6)
 # Tested on example 1 i section3 and with 111 iteration gives exactlly same results as Dia's paper.
+
