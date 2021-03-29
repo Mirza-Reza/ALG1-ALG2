@@ -63,7 +63,7 @@ end
 
  function GenAlg(x₀,A,b,α,a ;ϵ=1e-6, max_itr=120)
     xₖ=x₀
-    gₐ=A*a
+    gₐ=A*a + b
     qa_α = Quadratic(a,A,b)-α
     uₖ =A*xₖ+b
     vₖ =a-xₖ 
@@ -120,14 +120,14 @@ end
        λ₁=D[1]
        λ₂=D[2]
        p  = pickupRoot(β,h₁,h₂,λ₁,λ₂)
-        println(p)
+        # println(p)
         #println(" p₁=$p₁,p₂=$p₂")
         #return   p₁,p₂
     aₕ⁽ᵖ⁾= p       
     aₗ⁽ᵖ⁾=Q'*(aₕ⁽ᵖ⁾- D⁻¹Qbₖ)
       # xₖ₊₁ ===========================================================#
-       ηₖ⁽²⁾ =1-((aₗ⁽ᵖ⁾[1])/(normvₖ)+( uₖdotvₖ)/(vₖdotvₖ))*(aₗ⁽ᵖ⁾[2])/(normzₖ)
-       γₖ⁽²⁾=-1*((aₗ⁽ᵖ⁾[2])/(normzₖ))./(ηₖ⁽²⁾)
+    ηₖ⁽²⁾ = 1 - (aₗ⁽ᵖ⁾[1]/normvₖ- (uₖdotvₖ/vₖdotvₖ)*aₗ⁽ᵖ⁾[2]/normzₖ)
+    γₖ⁽²⁾=(- aₗ⁽ᵖ⁾[2]/normzₖ)/(ηₖ⁽²⁾)
     #    @show γₖ⁽²⁾
         # γₖ⁽²⁾= -1
        if γₖ⁽²⁾ < 0. || abs(γₖ⁽²⁾) <= ϵ
@@ -177,12 +177,11 @@ max_itr=5
         while k<=max_itr
        
           for i=0:2
-                if i<2
-                    println("use Alg 2 to find γ⁽²⁾")
-                else 
-                    println("use Alg 1 to find γ⁽¹⁾")
-                end
-            i+=1
+                if i<2,
+,
+,
+,
+,
             end
          k+=1
         continue  
