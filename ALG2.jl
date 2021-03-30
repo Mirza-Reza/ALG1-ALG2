@@ -1,5 +1,7 @@
+using BenchmarkTools
 using LinearAlgebra
 using PolynomialRoots
+
 function Quadratic(x,A,b)
     return dot(x,A*x)+2*dot(b,x)
 end
@@ -49,7 +51,7 @@ function compute_Alg1_γk(vₖdotAvₖ,vₖdotvₖ,vₖdotAzₖ,zₖdotAzₖ,z�
     return γₖ
 end
 
-function compute_Alg1_ηk(gₐ,qa_α,wₖ,wₖdotAwₖ)
+function compute_ηk(gₐ,qa_α,wₖ,wₖdotAwₖ)
     N1=dot(gₐ,wₖ)/(wₖdotAwₖ)
     N2=(N1).^2
     N3=(qa_α)./(wₖdotAwₖ)
@@ -57,26 +59,52 @@ function compute_Alg1_ηk(gₐ,qa_α,wₖ,wₖdotAwₖ)
     return ηₖ
 end
 
+function compute_Alg2_γk(normvₖ,normzₖ,uₖdotvₖ,uₖdotzₖ,vₖdotvₖ,vₖdotAvₖ,vₖdotAzₖ,zₖdotAvₖ,zₖdotAzₖ)
+       aₗ=[normvₖ,0]
+       Aₖ=[(vₖdotAvₖ)/(normvₖ^2)  (vₖdotAzₖ)/(normvₖ*normzₖ) ; 
+             (zₖdotAvₖ)/(normvₖ*normzₖ)  (zₖdotAzₖ)/(normzₖ^2)]
+       bₖ=[(uₖdotvₖ)/(normvₖ);(uₖdotzₖ)/(normzₖ)]
+       D, Q = eigen(Aₖ)
+       Qbₖ=Q*bₖ
+       D⁻¹Qbₖ=D.\Qbₖ
+       β=dot(Qbₖ,D⁻¹Qbₖ)
+       aₕ=Q*aₗ+D⁻¹Qbₖ
+       #Solve Quadratic=========================================
+       h₁=aₕ[1]
+       h₂=aₕ[2]
+       λ₁=D[1]
+       λ₂=D[2]
+       aₕ⁽ᵖ⁾  = pickupRoot(β,h₁,h₂,λ₁,λ₂)
+       aₗ⁽ᵖ⁾=Q'*(aₕ⁽ᵖ⁾- D⁻¹Qbₖ)
+       ηₖ² = 1 - (aₗ⁽ᵖ⁾[1]/normvₖ- (uₖdotvₖ/vₖdotvₖ)*aₗ⁽ᵖ⁾[2]/normzₖ)
+       γₖ²=(- aₗ⁽ᵖ⁾[2]/normzₖ)/(ηₖ²)
+    return γₖ²
+end
 
 
 
 
- function GenAlg(x₀,A,b,α,a ;ϵ=1e-6, max_itr=120)
+
+ function GenAlg(x₀,A,b,α,a ; ϵ=1e-6, max_itr=120, 
+                m₁ = 1, m₂ = 1, c₁ = 0.1, c₂ = 0.8 )
     xₖ=x₀
     gₐ=A*a + b
     qa_α = Quadratic(a,A,b)-α
-    uₖ =A*xₖ+b
-    vₖ =a-xₖ 
-    uₖdotvₖ=dot(uₖ,vₖ)
-    vₖdotvₖ=dot(vₖ,vₖ)
-    normuₖ=norm(uₖ)
-    normvₖ=sqrt(vₖdotvₖ)
-    Mₖ=uₖdotvₖ/(normuₖ* normvₖ)  #Mk is qoutient in tolerance condition
-    E=1-Mₖ 
+    status = :MaxIter
     k=0
-    called_alg = :Alg2
-    while k<= max_itr && E>=ϵ
-
+    while k<= max_itr 
+        uₖ =A*xₖ+b
+        vₖ =a-xₖ 
+        uₖdotvₖ=dot(uₖ,vₖ)
+        vₖdotvₖ=dot(vₖ,vₖ)
+        normuₖ=norm(uₖ)
+        normvₖ=sqrt(vₖdotvₖ)
+        Mₖ=uₖdotvₖ/(normuₖ* normvₖ)  #Mk is qoutient in tolerance condition
+        E=1-Mₖ 
+        if E < ϵ
+            status = :Optimal
+            return status, xₖ,k,E         
+        end
         zₖ =uₖ-((uₖdotvₖ)/(vₖdotvₖ))*vₖ
         normzₖ=norm(zₖ)
         zₖdotzₖ=dot(zₖ,zₖ)
@@ -87,126 +115,38 @@ end
         zₖdotAzₖ=dot(zₖ,Azₖ)
         vₖdotAzₖ=dot(vₖ,Azₖ)
         zₖdotAvₖ=dot(zₖ,Avₖ)
-       #= 
-        cₖ=xₖ-( γₖ⁽¹⁾.*uₖ)  #the center of maximal 2-d inside ball
-        #  Step3  ==== Calculation of  xk+1  ==============================
-        wₖ=cₖ-a
-        wₖ=xₖ-( γₖ⁽¹⁾.*uₖ)-a
-        # ηk =============================
-        Awₖ=A*wₖ
-        wₖdotAwₖ= dot(wₖ,Awₖ)
+        
+        #Alg1================================================
+        γₖ¹ = compute_Alg1_γk(vₖdotAvₖ,vₖdotvₖ,vₖdotAzₖ,zₖdotAzₖ,zₖdotzₖ)   
+        #Alg2================================================
+        γₖ² = compute_Alg2_γk(normvₖ,normzₖ,uₖdotvₖ,uₖdotzₖ,vₖdotvₖ,vₖdotAvₖ,vₖdotAzₖ,zₖdotAvₖ,zₖdotAzₖ)
+        #Safeguard for Alg2=================================
+        if γₖ² < 0. || abs(γₖ²) <= ϵ
+            γₖ² = γₖ¹
+        end
+        #Alg4================================================
+        if mod(k,m₁+m₂) < m₁
+            γₖ = γₖ²
+        else
+            γₖ = c₁* γₖ¹  + c₂* γₖ²
+        end
 
-         
-        N1=dot(gₐ,wₖ)/(wₖdotAwₖ)
-        N2=(N1).^2
-        N3=(qa_α)./(wₖdotAwₖ)
-        ηₖ=-N1-sqrt(N2-N3)  #η is a number too close to 1.
-        xₖ=a+(ηₖ.*wₖ)  =#
-
-       #Alg2================================================
-       aₗ=[normvₖ,0]
-       Aₖ=[(vₖdotAvₖ)/(normvₖ^2)  (vₖdotAzₖ)/(normvₖ*normzₖ) ; 
-             (zₖdotAvₖ)/(normvₖ*normzₖ)  (zₖdotAzₖ)/(normzₖ^2)]
-       bₖ=[(uₖdotvₖ)/(normvₖ);(uₖdotzₖ)/(normzₖ)]
-       D, Q = eigen(Aₖ)
-       Qbₖ=Q*bₖ
-       D⁻¹Qbₖ=D.\Qbₖ
-       #Aₖ=Q'*D*Q
-       β=dot(Qbₖ,D⁻¹Qbₖ)
-       aₕ=Q*aₗ+D⁻¹Qbₖ
-       #Solve Quadratic=========================================
-       h₁=aₕ[1]
-       h₂=aₕ[2]
-       λ₁=D[1]
-       λ₂=D[2]
-       p  = pickupRoot(β,h₁,h₂,λ₁,λ₂)
-        # println(p)
-        #println(" p₁=$p₁,p₂=$p₂")
-        #return   p₁,p₂
-    aₕ⁽ᵖ⁾= p       
-    aₗ⁽ᵖ⁾=Q'*(aₕ⁽ᵖ⁾- D⁻¹Qbₖ)
-      # xₖ₊₁ ===========================================================#
-    ηₖ⁽²⁾ = 1 - (aₗ⁽ᵖ⁾[1]/normvₖ- (uₖdotvₖ/vₖdotvₖ)*aₗ⁽ᵖ⁾[2]/normzₖ)
-    γₖ⁽²⁾=(- aₗ⁽ᵖ⁾[2]/normzₖ)/(ηₖ⁽²⁾)
-    #    @show γₖ⁽²⁾
-        # γₖ⁽²⁾= -1
-       if γₖ⁽²⁾ < 0. || abs(γₖ⁽²⁾) <= ϵ
-            γₖ⁽²⁾ = compute_Alg1_γk(vₖdotAvₖ,vₖdotvₖ,vₖdotAzₖ,zₖdotAzₖ,zₖdotzₖ)
-            # @show γₖ⁽²⁾
-            ωₖ⁽²⁾=-(γₖ⁽²⁾*uₖ)-vₖ
-            wₖdotAwₖ = dot(ωₖ⁽²⁾,A*ωₖ⁽²⁾)
-            ηₖ⁽²⁾ = compute_Alg1_ηk(gₐ,qa_α,ωₖ⁽²⁾,wₖdotAwₖ)
-       else
-            ωₖ⁽²⁾=-1*(γₖ⁽²⁾*uₖ)-vₖ
-       end
-       xₖ=a.+(ηₖ⁽²⁾*ωₖ⁽²⁾)
-       uₖ =A*xₖ+b
-       vₖ =a-xₖ 
-       uₖdotvₖ=dot(uₖ,vₖ)
-       vₖdotvₖ=dot(vₖ,vₖ)
-       normuₖ=norm(uₖ)
-       normvₖ=sqrt(vₖdotvₖ)
-       Mₖ=uₖdotvₖ/(normuₖ* normvₖ)  #Mk is qoutient in tolerance condition
-       E=1-Mₖ 
-       k+=1
+        ωₖ=-(γₖ*uₖ)-vₖ
+        ωₖdotAωₖ = dot(ωₖ,A*ωₖ)
+        ηₖ = compute_ηk(gₐ,qa_α,ωₖ,ωₖdotAωₖ)
+        xₖ=a.+(ηₖ*ωₖ)
+        k+=1
     end
-    
-    return xₖ,k,E
+   
+    return status, xₖ,k,E
 end
      
-     N=10
-     i = 1:1:N
-     i² =i.^2
-     a =(i².*10).+1
-     A=Diagonal(i²)
-     b=zeros(N)
-     α=385
-     x₀=sqrt(α/Quadratic(a,A,b)).*a 
-      xₖ,k,E=  GenAlg(x₀,A,b,α,a,ϵ=1e-6)
-
-
-
-     #=Alg3
-     γ₃ₖ₊ᵢ=γ₃ₖ₊ᵢ⁽²⁾     for i=0,1
-     γ₃ₖ₊₂=γ₃ₖ₊ᵢ⁽¹⁾ 
-     =#
-     #=================================================
-max_itr=5
-        k=1
-       #i=0 
-        while k<=max_itr
-       
-          for i=0:2
-                if i<2,
-,
-,
-,
-,
-            end
-         k+=1
-        continue  
-        end
-
-      =#
-
-      
-      #=Alg4============================================================
-     m1=1
-m2=1
-c1=0.1
-c2=0.8
-max_itr=20
-k=1
-#i=0 
-while k<=max_itr
-     b=mod(k,c1+c2) # Remainder after division (modulo operation)
-        if b<c1
-            println("use Alg 2 to find γₖ⁽²⁾")
-        else 
-            println(" γₖ=c1*γₖ⁽¹⁾+ c2*γₖ⁽²⁾")
-        end
- k+=1
-continue  
-end
-
-     =#
+    N=10
+    i = 1:1:N
+    i² =i.^2
+    a =(i².*10).+1
+    A=Diagonal(i²)
+    b=zeros(N)
+    α=385
+    x₀=sqrt(α/Quadratic(a,A,b)).*a 
+    status, xₖ,k,E =  GenAlg(x₀,A,b,α,a)
